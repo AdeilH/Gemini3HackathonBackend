@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -64,8 +65,21 @@ func buildAuthService(ctx context.Context) (*internalauth.Service, error) {
 	}
 
 	redisAddr := os.Getenv("REDIS_ADDR")
+	redisPassword := os.Getenv("REDIS_PASSWORD")
+
 	if redisAddr == "" {
 		redisAddr = "127.0.0.1:6379"
+	}
+
+	if strings.HasPrefix(redisAddr, "redis://") {
+		parsedURL, err := url.Parse(redisAddr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid redis url: %w", err)
+		}
+		redisAddr = parsedURL.Host
+		if password, ok := parsedURL.User.Password(); ok {
+			redisPassword = password
+		}
 	}
 
 	accessTTL := parseDurationOrDefault(os.Getenv("ACCESS_TOKEN_TTL"), time.Hour)
@@ -73,7 +87,7 @@ func buildAuthService(ctx context.Context) (*internalauth.Service, error) {
 
 	cfg := internalauth.Config{
 		PostgresDSN:    pgDSN,
-		Redis:          rredis.Options{Addr: redisAddr, Password: os.Getenv("REDIS_PASSWORD")},
+		Redis:          rredis.Options{Addr: redisAddr, Password: redisPassword},
 		JWTSecret:      jwtSecret,
 		JWTAlgorithms:  []string{"HS256"},
 		JWTIssuer:      "simulatorboss",
