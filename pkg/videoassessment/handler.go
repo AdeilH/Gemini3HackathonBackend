@@ -65,8 +65,8 @@ func (h *Handler) uploadVideo(c echo.Context) error {
 
 	// 4. Validate file extension (basic check)
 	ext := strings.ToLower(filepath.Ext(handler.Filename))
-	if ext != ".mp4" {
-		return c.JSON(http.StatusUnsupportedMediaType, echo.Map{"error": fmt.Sprintf("Only .mp4 files are allowed, got: %s", ext)})
+	if ext != ".mp4" && ext != ".webm" {
+		return c.JSON(http.StatusUnsupportedMediaType, echo.Map{"error": fmt.Sprintf("Only .mp4 and .webm files are allowed, got: %s", ext)})
 	}
 
 	// 5. Validate file content type (robust check)
@@ -77,8 +77,8 @@ func (h *Handler) uploadVideo(c echo.Context) error {
 	}
 
 	filetype := http.DetectContentType(buff)
-	if filetype != "video/mp4" && filetype != "application/octet-stream" {
-		return c.JSON(http.StatusUnsupportedMediaType, echo.Map{"error": fmt.Sprintf("The provided file is not a valid MP4 video. Detected type: %s", filetype)})
+	if filetype != "video/mp4" && filetype != "video/webm" && filetype != "application/octet-stream" {
+		return c.JSON(http.StatusUnsupportedMediaType, echo.Map{"error": fmt.Sprintf("The provided file is not a valid video. Detected type: %s", filetype)})
 	}
 
 	// Reset the file pointer to the start so subsequent reads work
@@ -114,7 +114,11 @@ func (h *Handler) uploadVideo(c echo.Context) error {
 	// Close it now so other processes can access it if needed (though on linux it's fine)
 	tmpFile.Close()
 
-	res, err := h.svc.UploadVideo(c.Request().Context(), tmpFile.Name(), "video/mp4")
+	mimeType := "video/mp4"
+	if ext == ".webm" {
+		mimeType = "video/webm"
+	}
+	res, err := h.svc.UploadVideo(c.Request().Context(), tmpFile.Name(), mimeType)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
 	}
