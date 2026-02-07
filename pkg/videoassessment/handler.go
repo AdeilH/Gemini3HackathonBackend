@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"time"
 
@@ -49,7 +50,9 @@ func (h *Handler) uploadVideo(c echo.Context) error {
 
 	// 2. Limit request body size to prevent server exhaustion
 	c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, MAX_UPLOAD_SIZE)
-	if err := c.Request().ParseMultipartForm(MAX_UPLOAD_SIZE); err != nil {
+	// ParseMultipartForm maxMemory determines how much is kept in RAM.
+	// Lowering to 10MB so larger files spill to disk, saving RAM.
+	if err := c.Request().ParseMultipartForm(10 << 20); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "File too large"})
 	}
 
@@ -61,8 +64,9 @@ func (h *Handler) uploadVideo(c echo.Context) error {
 	defer file.Close()
 
 	// 4. Validate file extension (basic check)
-	if filepath.Ext(handler.Filename) != ".mp4" {
-		return c.JSON(http.StatusUnsupportedMediaType, echo.Map{"error": "Only .mp4 files are allowed"})
+	ext := strings.ToLower(filepath.Ext(handler.Filename))
+	if ext != ".mp4" {
+		return c.JSON(http.StatusUnsupportedMediaType, echo.Map{"error": fmt.Sprintf("Only .mp4 files are allowed, got: %s", ext)})
 	}
 
 	// 5. Validate file content type (robust check)
@@ -73,8 +77,8 @@ func (h *Handler) uploadVideo(c echo.Context) error {
 	}
 
 	filetype := http.DetectContentType(buff)
-	if filetype != "video/mp4" {
-		return c.JSON(http.StatusUnsupportedMediaType, echo.Map{"error": "The provided file is not a valid MP4 video."})
+	if filetype != "video/mp4" && filetype != "application/octet-stream" {
+		return c.JSON(http.StatusUnsupportedMediaType, echo.Map{"error": fmt.Sprintf("The provided file is not a valid MP4 video. Detected type: %s", filetype)})
 	}
 
 	// Reset the file pointer to the start so subsequent reads work
